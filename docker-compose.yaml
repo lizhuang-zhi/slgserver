@@ -1,5 +1,3 @@
-version: "3"
-
 networks:
   network:
     ipam:
@@ -9,11 +7,9 @@ networks:
 
 services:
   mysql:
-    build:
-      context: ./
-      dockerfile: ./Dockerfile-mysql
+    image: mysql:8.0
     container_name: slg-mysql
-    command: mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci #设置utf8字符集
+    command: mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     restart: always
     ports:
       - "3306:3306"
@@ -26,6 +22,7 @@ services:
     networks:
       network:
         ipv4_address: 177.8.0.11
+    platform: linux/amd64
 
   chat:
     build:
@@ -41,6 +38,7 @@ services:
     networks:
       network:
         ipv4_address: 177.8.0.12
+    platform: linux/amd64
 
   gate:
     build:
@@ -56,6 +54,7 @@ services:
     networks:
       network:
         ipv4_address: 177.8.0.13
+    platform: linux/amd64
 
   http:
     build:
@@ -73,6 +72,7 @@ services:
     networks:
       network:
         ipv4_address: 177.8.0.14
+    platform: linux/amd64
 
   login:
     build:
@@ -90,6 +90,7 @@ services:
     networks:
       network:
         ipv4_address: 177.8.0.15
+    platform: linux/amd64
 
   slg:
     build:
@@ -107,3 +108,4 @@ services:
     networks:
       network:
         ipv4_address: 177.8.0.16
+    platform: linux/amd64
