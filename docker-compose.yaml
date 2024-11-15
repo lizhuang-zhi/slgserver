@@ -1,3 +1,5 @@
+version: "3"
+
 networks:
   network:
     ipam:
@@ -15,6 +17,7 @@ services:
       - "3306:3306"
     volumes:
       - ./mysql_data:/var/lib/mysql
+      - ./data/conf:/docker-entrypoint-initdb.d # 挂载初始化脚本目录
     environment:
       - MYSQL_ROOT_PASSWORD=123456abc
       - MYSQL_USER=slg
@@ -22,7 +25,6 @@ services:
     networks:
       network:
         ipv4_address: 177.8.0.11
-    platform: linux/amd64
 
   chat:
     build:
@@ -38,7 +40,6 @@ services:
     networks:
       network:
         ipv4_address: 177.8.0.12
-    platform: linux/amd64
 
   gate:
     build:
@@ -54,7 +55,6 @@ services:
     networks:
       network:
         ipv4_address: 177.8.0.13
-    platform: linux/amd64
 
   http:
     build:
@@ -72,7 +72,6 @@ services:
     networks:
       network:
         ipv4_address: 177.8.0.14
-    platform: linux/amd64
 
   login:
     build:
@@ -90,7 +89,6 @@ services:
     networks:
       network:
         ipv4_address: 177.8.0.15
-    platform: linux/amd64
 
   slg:
     build:
@@ -108,4 +106,3 @@ services:
     networks:
       network:
         ipv4_address: 177.8.0.16
-    platform: linux/amd64
