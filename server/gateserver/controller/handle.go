@@ -55,6 +55,7 @@ func isChat(msgName string) bool {
 
 func (this *Handle) InitRouter(r *net.Router) {
 	this.init()
+	// 添加中间件
 	g := r.Group("*").Use(middleware.ElapsedTime(), middleware.Log())
 	g.AddRouter("*", this.all)
 }
@@ -115,65 +116,96 @@ func (this *Handle) OnServerConnClose(conn net.WSConn) {
 }
 
 func (this *Handle) all(req *net.WsMsgReq, rsp *net.WsMsgRsp) {
+	// 记录日志，表示处理开始
 	log.DefaultLog.Info("gateserver handle all begin",
 		zap.String("proxyStr", req.Body.Proxy),
 		zap.String("msgName", req.Body.Name))
+
+	// 调用deal方法处理请求和响应
 	this.deal(req, rsp)
 
+	// 如果请求的消息名称是"role.enterServer"且响应的状态码是OK
 	if req.Body.Name == "role.enterServer" && rsp.Body.Code == constant.OK {
-		//登录聊天服
+		// 登录聊天服
+		// 解码响应消息到rspObj
 		rspObj := &proto.EnterServerRsp{}
 		mapstructure.Decode(rsp.Body.Msg, rspObj)
+
+		// 创建登录请求
 		r := &chat_proto.LoginReq{RId: rspObj.Role.RId, NickName: rspObj.Role.NickName, Token: rspObj.Token}
+		// 创建请求体
 		reqBody := &net.ReqBody{Seq: 0, Name: "chat.login", Msg: r, Proxy: ""}
+		// 创建响应体
 		rspBody := &net.RspBody{Seq: 0, Name: "chat.login", Msg: r, Code: 0}
+		// 再次调用deal方法处理登录请求和响应
 		this.deal(&net.WsMsgReq{Body: reqBody, Conn: req.Conn}, &net.WsMsgRsp{Body: rspBody})
 	}
 
+	// 记录日志，表示处理结束
 	log.DefaultLog.Info("gateserver handle all end",
 		zap.String("proxyStr", req.Body.Proxy),
 		zap.String("msgName", req.Body.Name))
 }
 
 func (this *Handle) deal(req *net.WsMsgReq, rsp *net.WsMsgRsp) {
-	//协议转发
+	// 协议转发
+	// 获取请求体中的代理字符串
 	proxyStr := req.Body.Proxy
+	// 判断请求体中的名称是否为账户名
 	if isAccount(req.Body.Name) {
+		// 如果是账户名，则使用登录代理
 		proxyStr = this.loginProxy
 	} else if isChat(req.Body.Name) {
+		// 如果是聊天名，则使用聊天代理
 		proxyStr = this.chatProxy
 	} else {
+		// 否则使用默认代理
 		proxyStr = this.slgProxy
 	}
 
+	// 如果代理字符串为空，则返回错误代码
 	if proxyStr == "" {
 		rsp.Body.Code = constant.ProxyNotInConnect
 		return
 	}
 
+	// 加锁
 	this.proxyMutex.Lock()
+	// 判断代理字符串是否存在于代理映射中
 	_, ok := this.proxys[proxyStr]
 	if ok == false {
+		// 如果不存在，则创建新的映射
 		this.proxys[proxyStr] = make(map[int64]*net.ProxyClient)
 	}
 
+	// 声明错误变量和代理客户端变量
 	var err error
 	var proxy *net.ProxyClient
+	// 从请求连接中获取cid属性
 	d, _ := req.Conn.GetProperty("cid")
 	cid := d.(int64)
+	// 从代理映射中获取代理客户端
 	proxy, ok = this.proxys[proxyStr][cid]
+	// 解锁
 	this.proxyMutex.Unlock()
 
+	// 如果代理客户端不存在
 	if ok == false {
+		// 创建新的代理客户端
 		proxy = net.NewProxyClient(proxyStr)
 
+		// 加锁
 		this.proxyMutex.Lock()
+		// 将新的代理客户端添加到代理映射中
 		this.proxys[proxyStr][cid] = proxy
+		// 解锁
 		this.proxyMutex.Unlock()
 
-		//发起链接,这里是阻塞的，所以不要上锁
+		// 发起链接，这里是阻塞的，所以不要上锁
+		// 发起链接
 		err = proxy.Connect()
 		if err == nil {
+			// 设置代理客户端的属性
 			proxy.SetProperty("cid", cid)
 			proxy.SetProperty("proxy", proxyStr)
 			proxy.SetProperty("gateConn", req.Conn)
@@ -182,22 +214,31 @@ func (this *Handle) deal(req *net.WsMsgReq, rsp *net.WsMsgRsp) {
 		}
 	}
 
+	// 如果发生错误
 	if err != nil {
+		// 加锁
 		this.proxyMutex.Lock()
+		// 从代理映射中删除cid对应的代理客户端
 		delete(this.proxys[proxyStr], cid)
+		// 解锁
 		this.proxyMutex.Unlock()
+		// 设置响应体的错误代码
 		rsp.Body.Code = constant.ProxyConnectError
 		return
 	}
 
+	// 设置响应体的序列号和名称
 	rsp.Body.Seq = req.Body.Seq
 	rsp.Body.Name = req.Body.Name
 
+	// 发送消息到代理客户端
 	r, err := proxy.Send(req.Body.Name, req.Body.Msg)
 	if err == nil {
+		// 设置响应体的代码和消息
 		rsp.Body.Code = r.Code
 		rsp.Body.Msg = r.Msg
 	} else {
+		// 设置响应体的错误代码和消息为空
 		rsp.Body.Code = constant.ProxyConnectError
 		rsp.Body.Msg = nil
 	}
