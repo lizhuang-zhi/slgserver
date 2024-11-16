@@ -16,40 +16,40 @@ import (
 
 // 客户端连接
 type ServerConn struct {
-	wsSocket   	*websocket.Conn // 底层websocket
-	outChan    	chan *WsMsgRsp  // 写队列
-	isClosed   	bool
-	needSecret 	bool
-	Seq			int64
-	router     	*Router
+	wsSocket    *websocket.Conn // 底层websocket
+	outChan     chan *WsMsgRsp  // 写队列
+	isClosed    bool
+	needSecret  bool
+	Seq         int64
+	router      *Router
 	beforeClose func(conn WSConn)
-	onClose    	func(conn WSConn)
+	onClose     func(conn WSConn)
 	//链接属性
-	property 	map[string]interface{}
+	property map[string]interface{}
 	//保护链接属性修改的锁
 	propertyLock sync.RWMutex
 }
 
 func NewServerConn(wsSocket *websocket.Conn, needSecret bool) *ServerConn {
 	conn := &ServerConn{
-		wsSocket: wsSocket,
-		outChan: make(chan *WsMsgRsp, 1000),
-		isClosed:false,
-		property:make(map[string]interface{}),
-		needSecret:needSecret,
-		Seq: 0,
+		wsSocket:   wsSocket,
+		outChan:    make(chan *WsMsgRsp, 1000),
+		isClosed:   false,
+		property:   make(map[string]interface{}),
+		needSecret: needSecret,
+		Seq:        0,
 	}
 
 	return conn
 }
 
-//开启异步
+// 开启异步
 func (this *ServerConn) Start() {
 	go this.wsReadLoop()
 	go this.wsWriteLoop()
 }
 
-func (this *ServerConn) Addr() string  {
+func (this *ServerConn) Addr() string {
 	return this.wsSocket.RemoteAddr().String()
 }
 
@@ -89,16 +89,16 @@ func (this *ServerConn) wsReadLoop() {
 		body := &ReqBody{}
 		if this.needSecret {
 			//检测是否有加密，没有加密发起Handshake
-			if secretKey, err:= this.GetProperty("secretKey"); err == nil {
+			if secretKey, err := this.GetProperty("secretKey"); err == nil {
 				key := secretKey.(string)
 				d, err := util.AesCBCDecrypt(data, []byte(key), []byte(key), openssl.ZEROS_PADDING)
 				if err != nil {
 					log.DefaultLog.Error("AesDecrypt error", zap.Error(err))
 					this.Handshake()
-				}else{
+				} else {
 					data = d
 				}
-			}else{
+			} else {
 				log.DefaultLog.Info("secretKey not found client need handshake", zap.Error(err))
 				this.Handshake()
 				return
@@ -112,15 +112,15 @@ func (this *ServerConn) wsReadLoop() {
 			if req.Body.Name == HeartbeatMsg {
 				h := &Heartbeat{}
 				mapstructure.Decode(body.Msg, h)
-				h.STime = time.Now().UnixNano()/1e6
+				h.STime = time.Now().UnixNano() / 1e6
 				rsp.Body.Msg = h
-			}else{
+			} else {
 				if this.router != nil {
 					this.router.Run(req, rsp)
 				}
 			}
 			this.outChan <- rsp
-		}else{
+		} else {
 			log.DefaultLog.Error("wsReadLoop Unmarshal error", zap.Error(err))
 			this.Handshake()
 		}
@@ -141,34 +141,35 @@ func (this *ServerConn) wsWriteLoop() {
 	for {
 		select {
 		// 取一个消息
-		case msg := <- this.outChan:
+		case msg := <-this.outChan:
 			// 写给websocket
 			this.write(msg.Body)
 		}
 	}
 }
 
-
-func (this *ServerConn) write(msg interface{}) error{
+func (this *ServerConn) write(msg interface{}) error {
+	// 包装消息, 并通过AesCBC加密
 	data, err := util.Marshal(msg)
 	if err == nil {
 		if this.needSecret {
-			if secretKey, err:= this.GetProperty("secretKey"); err == nil {
+			if secretKey, err := this.GetProperty("secretKey"); err == nil {
 				key := secretKey.(string)
 				data, _ = util.AesCBCEncrypt(data, []byte(key), []byte(key), openssl.ZEROS_PADDING)
 			}
 		}
-	}else {
+	} else {
 		log.DefaultLog.Error("wsWriteLoop Marshal body error", zap.Error(err))
 		return err
 	}
 
-	if data, err := util.Zip(data); err == nil{
+	// 压缩消息, 并通过websocket发送
+	if data, err := util.Zip(data); err == nil {
 		if err := this.wsSocket.WriteMessage(websocket.BinaryMessage, data); err != nil {
 			this.Close()
 			return err
 		}
-	}else{
+	} else {
 		return err
 	}
 	return nil
@@ -179,17 +180,17 @@ func (this *ServerConn) Close() {
 	if !this.isClosed {
 		this.isClosed = true
 
-		if this.beforeClose != nil{
+		if this.beforeClose != nil {
 			this.beforeClose(this)
 		}
 
-		if this.onClose != nil{
+		if this.onClose != nil {
 			this.onClose(this)
 		}
 	}
 }
 
-//设置链接属性
+// 设置链接属性
 func (this *ServerConn) SetProperty(key string, value interface{}) {
 	this.propertyLock.Lock()
 	defer this.propertyLock.Unlock()
@@ -197,7 +198,7 @@ func (this *ServerConn) SetProperty(key string, value interface{}) {
 	this.property[key] = value
 }
 
-//获取链接属性
+// 获取链接属性
 func (this *ServerConn) GetProperty(key string) (interface{}, error) {
 	this.propertyLock.RLock()
 	defer this.propertyLock.RUnlock()
@@ -209,19 +210,19 @@ func (this *ServerConn) GetProperty(key string) (interface{}, error) {
 	}
 }
 
-func (this *ServerConn) SetRouter(router *Router)  {
+func (this *ServerConn) SetRouter(router *Router) {
 	this.router = router
 }
 
-func (this *ServerConn) SetOnClose(hookFunc func (WSConn))  {
+func (this *ServerConn) SetOnClose(hookFunc func(WSConn)) {
 	this.onClose = hookFunc
 }
 
-func (this *ServerConn) SetOnBeforeClose(hookFunc func (WSConn))  {
+func (this *ServerConn) SetOnBeforeClose(hookFunc func(WSConn)) {
 	this.beforeClose = hookFunc
 }
 
-//移除链接属性
+// 移除链接属性
 func (this *ServerConn) RemoveProperty(key string) {
 	this.propertyLock.Lock()
 	defer this.propertyLock.Unlock()
@@ -229,36 +230,36 @@ func (this *ServerConn) RemoveProperty(key string) {
 	delete(this.property, key)
 }
 
-//握手协议
-func (this *ServerConn) Handshake(){
+// 握手协议
+func (this *ServerConn) Handshake() {
 
 	secretKey := ""
 	if this.needSecret {
-		key, err:= this.GetProperty("secretKey")
+		key, err := this.GetProperty("secretKey")
 		if err == nil {
 			secretKey = key.(string)
-		}else{
+		} else {
 			secretKey = util.RandSeq(16)
 		}
 	}
 
 	handshake := &Handshake{Key: secretKey}
- 	body := &RspBody{Name: HandshakeMsg, Msg: handshake}
- 	if data, err := util.Marshal(body); err == nil {
- 		if secretKey != ""{
+	body := &RspBody{Name: HandshakeMsg, Msg: handshake}
+	if data, err := util.Marshal(body); err == nil {
+		if secretKey != "" {
 			this.SetProperty("secretKey", secretKey)
-		}else{
+		} else {
 			this.RemoveProperty("secretKey")
 		}
 
 		log.DefaultLog.Info("handshake secretKey",
 			zap.String("secretKey", secretKey))
 
-		if data, err = util.Zip(data); err == nil{
+		if data, err = util.Zip(data); err == nil {
 			this.wsSocket.WriteMessage(websocket.BinaryMessage, data)
 		}
 
-	}else {
+	} else {
 		log.DefaultLog.Error("handshake Marshal body error", zap.Error(err))
 	}
 }

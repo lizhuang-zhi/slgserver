@@ -12,10 +12,11 @@ import (
 
 var ConnMgr = Mgr{}
 var cid int64 = 0
+
 type Mgr struct {
-	cm        sync.RWMutex
-	um        sync.RWMutex
-	rm        sync.RWMutex
+	cm sync.RWMutex
+	um sync.RWMutex
+	rm sync.RWMutex
 
 	connCache map[int64]WSConn
 	userCache map[int]WSConn
@@ -71,14 +72,14 @@ func (this *Mgr) UserLogout(conn WSConn) {
 	this.removeUser(conn)
 }
 
-func (this* Mgr) removeUser(conn WSConn) {
+func (this *Mgr) removeUser(conn WSConn) {
 	this.um.Lock()
 	uid, err := conn.GetProperty("uid")
 	if err == nil {
 		//只删除自己的conn
 		id := uid.(int)
 		c, ok := this.userCache[id]
-		if ok && c == conn{
+		if ok && c == conn {
 			delete(this.userCache, id)
 		}
 	}
@@ -90,7 +91,7 @@ func (this* Mgr) removeUser(conn WSConn) {
 		//只删除自己的conn
 		id := rid.(int)
 		c, ok := this.roleCache[id]
-		if ok && c == conn{
+		if ok && c == conn {
 			delete(this.roleCache, id)
 		}
 	}
@@ -109,7 +110,7 @@ func (this *Mgr) RoleEnter(conn WSConn, rid int) {
 	this.roleCache[rid] = conn
 }
 
-func (this *Mgr) RemoveConn(conn WSConn){
+func (this *Mgr) RemoveConn(conn WSConn) {
 	this.cm.Lock()
 	cid, err := conn.GetProperty("cid")
 	if err == nil {
@@ -122,7 +123,7 @@ func (this *Mgr) RemoveConn(conn WSConn){
 }
 
 func (this *Mgr) PushByRoleId(rid int, msgName string, data interface{}) bool {
-	if rid <= 0	{
+	if rid <= 0 {
 		return false
 	}
 	this.rm.Lock()
@@ -131,19 +132,19 @@ func (this *Mgr) PushByRoleId(rid int, msgName string, data interface{}) bool {
 	if ok {
 		conn.Push(msgName, data)
 		return true
-	}else{
+	} else {
 		return false
 	}
 }
 
-func (this *Mgr) Count() int{
+func (this *Mgr) Count() int {
 	this.cm.RLock()
 	defer this.cm.RUnlock()
 
 	return len(this.connCache)
 }
 
-func (this *Mgr) Push(pushSync conn.PushSync){
+func (this *Mgr) Push(pushSync conn.PushSync) {
 
 	proto := pushSync.ToProto()
 	belongRIds := pushSync.BelongToRId()
@@ -156,7 +157,7 @@ func (this *Mgr) Push(pushSync conn.PushSync){
 		cellRIds := pos.RPMgr.GetCellRoleIds(x, y, 8, 6)
 		for _, rid := range cellRIds {
 			//是否能出现在视野
-			if can := pushSync.IsCanView(rid, x, y); can{
+			if can := pushSync.IsCanView(rid, x, y); can {
 				this.PushByRoleId(rid, pushSync.PushMsgName(), proto)
 				cells[rid] = rid
 			}
@@ -165,17 +166,17 @@ func (this *Mgr) Push(pushSync conn.PushSync){
 
 	//推送给目标位置
 	tx, ty := pushSync.TPosition()
-	if tx >= 0 && ty >= 0{
+	if tx >= 0 && ty >= 0 {
 		var cellRIds []int
 		if isCellView {
 			cellRIds = pos.RPMgr.GetCellRoleIds(tx, ty, 8, 6)
-		}else{
+		} else {
 			cellRIds = pos.RPMgr.GetCellRoleIds(tx, ty, 0, 0)
 		}
 
 		for _, rid := range cellRIds {
-			if _, ok := cells[rid]; ok == false{
-				if can := pushSync.IsCanView(rid, tx, ty); can{
+			if _, ok := cells[rid]; ok == false {
+				if can := pushSync.IsCanView(rid, tx, ty); can {
 					this.PushByRoleId(rid, pushSync.PushMsgName(), proto)
 					cells[rid] = rid
 				}
@@ -185,11 +186,10 @@ func (this *Mgr) Push(pushSync conn.PushSync){
 
 	//推送给自己
 	for _, rid := range belongRIds {
-		if _, ok := cells[rid]; ok == false{
+		if _, ok := cells[rid]; ok == false {
 			this.PushByRoleId(rid, pushSync.PushMsgName(), proto)
 		}
 	}
-
 
 }
 

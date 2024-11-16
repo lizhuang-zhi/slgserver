@@ -126,7 +126,6 @@ func (this *Handle) all(req *net.WsMsgReq, rsp *net.WsMsgRsp) {
 
 	// 如果请求的消息名称是"role.enterServer"且响应的状态码是OK
 	if req.Body.Name == "role.enterServer" && rsp.Body.Code == constant.OK {
-		// 登录聊天服
 		// 解码响应消息到rspObj
 		rspObj := &proto.EnterServerRsp{}
 		mapstructure.Decode(rsp.Body.Msg, rspObj)
@@ -147,19 +146,17 @@ func (this *Handle) all(req *net.WsMsgReq, rsp *net.WsMsgRsp) {
 		zap.String("msgName", req.Body.Name))
 }
 
+// 转发请求到对应的服务
 func (this *Handle) deal(req *net.WsMsgReq, rsp *net.WsMsgRsp) {
 	// 协议转发
 	// 获取请求体中的代理字符串
 	proxyStr := req.Body.Proxy
-	// 判断请求体中的名称是否为账户名
-	if isAccount(req.Body.Name) {
-		// 如果是账户名，则使用登录代理
+	if isAccount(req.Body.Name) { // 判断msgNamae是否为acount.xxx(判断是否转发到login服务器)
 		proxyStr = this.loginProxy
-	} else if isChat(req.Body.Name) {
-		// 如果是聊天名，则使用聊天代理
+	} else if isChat(req.Body.Name) { // 判断msgName是否为chat.xxx(判断是否转发到聊天服务器)
 		proxyStr = this.chatProxy
 	} else {
-		// 否则使用默认代理
+		// 转发到slg服务器
 		proxyStr = this.slgProxy
 	}
 
@@ -169,7 +166,6 @@ func (this *Handle) deal(req *net.WsMsgReq, rsp *net.WsMsgRsp) {
 		return
 	}
 
-	// 加锁
 	this.proxyMutex.Lock()
 	// 判断代理字符串是否存在于代理映射中
 	_, ok := this.proxys[proxyStr]
@@ -186,7 +182,6 @@ func (this *Handle) deal(req *net.WsMsgReq, rsp *net.WsMsgRsp) {
 	cid := d.(int64)
 	// 从代理映射中获取代理客户端
 	proxy, ok = this.proxys[proxyStr][cid]
-	// 解锁
 	this.proxyMutex.Unlock()
 
 	// 如果代理客户端不存在
@@ -194,15 +189,10 @@ func (this *Handle) deal(req *net.WsMsgReq, rsp *net.WsMsgRsp) {
 		// 创建新的代理客户端
 		proxy = net.NewProxyClient(proxyStr)
 
-		// 加锁
 		this.proxyMutex.Lock()
-		// 将新的代理客户端添加到代理映射中
 		this.proxys[proxyStr][cid] = proxy
-		// 解锁
 		this.proxyMutex.Unlock()
 
-		// 发起链接，这里是阻塞的，所以不要上锁
-		// 发起链接
 		err = proxy.Connect()
 		if err == nil {
 			// 设置代理客户端的属性
@@ -227,14 +217,12 @@ func (this *Handle) deal(req *net.WsMsgReq, rsp *net.WsMsgRsp) {
 		return
 	}
 
-	// 设置响应体的序列号和名称
 	rsp.Body.Seq = req.Body.Seq
 	rsp.Body.Name = req.Body.Name
 
-	// 发送消息到代理客户端
+	// 此时将gate网关看作客户端, 请求对应的服务
 	r, err := proxy.Send(req.Body.Name, req.Body.Msg)
 	if err == nil {
-		// 设置响应体的代码和消息
 		rsp.Body.Code = r.Code
 		rsp.Body.Msg = r.Msg
 	} else {

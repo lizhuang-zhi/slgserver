@@ -19,30 +19,30 @@ func NewGroup() *Group {
 	return &Group{users: map[int]*User{}}
 }
 
-func (this*Group) Enter(u *User) {
+func (this *Group) Enter(u *User) {
 	this.userMutex.Lock()
 	defer this.userMutex.Unlock()
 	this.users[u.rid] = u
 }
 
-func (this*Group) Exit(rid int) {
+func (this *Group) Exit(rid int) {
 	this.userMutex.Lock()
 	defer this.userMutex.Unlock()
 	delete(this.users, rid)
 }
 
-func (this*Group) GetUser(rid int) *User {
+func (this *Group) GetUser(rid int) *User {
 	this.userMutex.Lock()
 	defer this.userMutex.Unlock()
 	return this.users[rid]
 }
 
-func (this*Group) PutMsg(text string, rid int, t int8) *proto.ChatMsg {
+func (this *Group) PutMsg(text string, rid int, t int8) *proto.ChatMsg {
 
 	this.userMutex.RLock()
 	u, ok := this.users[rid]
 	this.userMutex.RUnlock()
-	if ok == false{
+	if ok == false {
 		return nil
 	}
 
@@ -50,7 +50,7 @@ func (this*Group) PutMsg(text string, rid int, t int8) *proto.ChatMsg {
 	this.msgMutex.Lock()
 	size := this.msgs.Size()
 	if size > 100 {
-		this.msgs.Dequeue()
+		this.msgs.Dequeue() //超过100条消息，删除最早的消息
 	}
 	this.msgs.Enqueue(msg)
 	this.msgMutex.Unlock()
@@ -65,7 +65,7 @@ func (this*Group) PutMsg(text string, rid int, t int8) *proto.ChatMsg {
 	return c
 }
 
-func (this*Group) History() []proto.ChatMsg {
+func (this *Group) History() []proto.ChatMsg {
 	r := make([]proto.ChatMsg, 0)
 	this.msgMutex.RLock()
 	items := this.msgs.items

@@ -6,38 +6,38 @@ import (
 )
 
 type ReqBody struct {
-	Seq     int64		`json:"seq"`
-	Name 	string 		`json:"name"`
-	Msg		interface{}	`json:"msg"`
-	Proxy	string		`json:"proxy"`
+	Seq   int64       `json:"seq"`
+	Name  string      `json:"name"`
+	Msg   interface{} `json:"msg"`
+	Proxy string      `json:"proxy"`
 }
 
 type RspBody struct {
-	Seq     int64		`json:"seq"`
-	Name 	string 		`json:"name"`
-	Code	int			`json:"code"`
-	Msg		interface{}	`json:"msg"`
+	Seq  int64       `json:"seq"`
+	Name string      `json:"name"`
+	Code int         `json:"code"`
+	Msg  interface{} `json:"msg"`
 }
 
 type WsMsgReq struct {
-	Body	*ReqBody
-	Conn	WSConn
+	Body *ReqBody
+	Conn WSConn
 }
 
 type WsMsgRsp struct {
-	Body*	RspBody
+	Body *RspBody
 }
 
 const HandshakeMsg = "handshake"
 const HeartbeatMsg = "heartbeat"
 
 type Handshake struct {
-	Key 	string `json:"key"`
+	Key string `json:"key"`
 }
 
 type Heartbeat struct {
-	CTime int64	`json:"ctime"`
-	STime int64	`json:"stime"`
+	CTime int64 `json:"ctime"`
+	STime int64 `json:"stime"`
 }
 
 type WSConn interface {
@@ -49,9 +49,9 @@ type WSConn interface {
 }
 
 type syncCtx struct {
-	ctx 		context.Context
-	cancel		context.CancelFunc
-	outChan    	chan *RspBody
+	ctx     context.Context
+	cancel  context.CancelFunc
+	outChan chan *RspBody
 }
 
 func newSyncCtx() *syncCtx {
@@ -59,10 +59,10 @@ func newSyncCtx() *syncCtx {
 	return &syncCtx{ctx: ctx, cancel: cancel, outChan: make(chan *RspBody)}
 }
 
-func (this* syncCtx) wait() *RspBody{
+func (this *syncCtx) wait() *RspBody {
 	defer this.cancel()
 	select {
-	case data := <- this.outChan:
+	case data := <-this.outChan:
 		return data
 	case <-this.ctx.Done():
 		return nil
